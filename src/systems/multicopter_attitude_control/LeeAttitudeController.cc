@@ -86,19 +86,34 @@ bool LeeAttitudeController::InitializeParameters()
 
 //////////////////////////////////////////////////
 void LeeAttitudeController::CalculateRotorVelocities(
-    const FrameData &_frameData, const Eigen::Quaterniond &_quatDes,
-    const double &_thrust,
+    const FrameData &_frameData, const RollPitchYawRateThrust &_command,
     Eigen::VectorXd &_rotorVelocities) const
 {
-    
-  Eigen::Matrix3d rotDes = _quatDes.toRotationMatrix();
+
+  // clamp roll and pitch values between -90 and 90 degrees TODO parametrize from SDF
+  double roll = std::max(std::min(_command.roll, GZ_PI / 2.0), -GZ_PI / 2.0);
+  double pitch = std::max(std::min(_command.pitch, GZ_PI / 2.0), -GZ_PI / 2.0);
+  // clamp yaw rate between 180 and -180 degrees per second
+  double yawRate = std::max(std::min(_command.yawRate, GZ_PI),
+                            -GZ_PI);
+  double thrust = _command.thrust;
+
+  // get current yaw 
+  double currentYaw = _frameData.pose.linear().eulerAngles(2, 1, 0)[0];
+  
+  // define current desired rotation matrix from desired roll, desired pitch and current yaw
+  Eigen::Matrix3d rotDes;
+  rotDes = Eigen::AngleAxisd(currentYaw, Eigen::Vector3d::UnitZ()) *
+           Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) *
+           Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
+  
 
   Eigen::Vector3d angularAcceleration =
-      this->ComputeDesiredAngularAcc(_frameData, rotDes);
+      this->ComputeDesiredAngularAcc(_frameData, rotDes, yawRate);
 
   Eigen::Vector4d angularAccelerationThrust;
   angularAccelerationThrust.block<3, 1>(0, 0) = angularAcceleration;
-  angularAccelerationThrust(3) = _thrust;
+  angularAccelerationThrust(3) = thrust;
 
   _rotorVelocities =
       this->angularAccToRotorVelocities * angularAccelerationThrust;
@@ -113,7 +128,7 @@ void LeeAttitudeController::CalculateRotorVelocities(
 // Control of complex maneuvers for a quadrotor UAV using geometric methods on
 // SE(3)
 Eigen::Vector3d LeeAttitudeController::ComputeDesiredAngularAcc(
-    const FrameData &_frameData, const Eigen::Matrix3d &_rotDes) const
+    const FrameData &_frameData, const Eigen::Matrix3d &_rotDes, const double &_yawRate) const
 {
   const Eigen::Matrix3d& rot = _frameData.pose.linear();
                 
@@ -124,7 +139,7 @@ Eigen::Vector3d LeeAttitudeController::ComputeDesiredAngularAcc(
   Eigen::Vector3d angleError = vectorFromSkewMatrix(angleErrorMatrix);
 
   Eigen::Vector3d angularRateDes(Eigen::Vector3d::Zero());
-  // angularRateDes[2] = _cmdVel.angular[2];
+  angularRateDes[2] = _yawRate;
 
   // The paper shows
   // e_omega = omega - R.T * R_d * omega_des

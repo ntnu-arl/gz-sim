@@ -165,11 +165,11 @@ namespace systems
                 const gz::sim::UpdateInfo &_info,
                 gz::sim::EntityComponentManager &_ecm) override;
 
-    /// \brief Callback for Pose messages
+    /// \brief Callback for Quaternion messages
     /// The controller waits for the first pose message before publishing any
     /// rotor velocities.
-    /// \param[in] _msg Pose message
-    private: void OnPose(const msgs::Pose &_msg);
+    /// \param[in] _msg Quaternion message
+    private: void OnQuat(const msgs::Quaternion &_msg);
 
     /// \brief Callback for enable messages
     /// \param[in] _msg Callback message. If false, the controller sends a zero
@@ -227,7 +227,7 @@ namespace systems
     /// \brief Current command velocity. This velocity is a reference velocity
     /// that the controller will try to maintain. A command of zeros must be
     /// given to stop the vehicle.
-    private: std::optional<msgs::Pose> poseMsg;
+    private: std::optional<msgs::Quaternion> quatMsg;
 
     /// \brief Maximum commanded linear velocity
     private: math::Vector3d maximumLinearVelocity;
@@ -235,8 +235,8 @@ namespace systems
     /// \brief Maximum commanded angular velocity
     private: math::Vector3d maximumAngularVelocity;
 
-    /// \brief Mutex for poseMsg
-    private: std::mutex poseMsgMutex;
+    /// \brief Mutex for quatMsg
+    private: std::mutex quatMsgMutex;
 
     /// \brief Rotor velocities message. This is here so we don't allocate
     /// memory every time we publish a message.

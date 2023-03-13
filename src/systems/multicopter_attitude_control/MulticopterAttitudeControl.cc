@@ -286,7 +286,7 @@ void MulticopterAttitudeControl::Configure(const Entity &_entity,
   // Subscribe to actuator command messages
   std::string topic{this->robotNamespace + "/" + this->commandSubTopic};
 
-  this->node.Subscribe(topic, &MulticopterAttitudeControl::OnPose, this);
+  this->node.Subscribe(topic, &MulticopterAttitudeControl::OnQuat, this);
   gzmsg << "MulticopterAttitudeControl subscribing to Pose messages on ["
          << topic << "]" << std::endl;
 
@@ -367,27 +367,25 @@ void MulticopterAttitudeControl::PreUpdate(
     {
       this->rotorVelocities.setZero();
       this->PublishRotorVelocities(_ecm, this->rotorVelocities);
-      // Clear the poseMsg so that the system waits for a new command after
+      // Clear the quatMsg so that the system waits for a new command after
       // being renabled.
-      std::lock_guard<std::mutex> lock(this->poseMsgMutex);
-      this->poseMsg.reset();
+      std::lock_guard<std::mutex> lock(this->quatMsgMutex);
+      this->quatMsg.reset();
     }
     return;
   }
 
-  EigenThrustOrientation thrustOrientation;
+  RollPitchYawRateThrust rpyt;
   {
-    std::lock_guard<std::mutex> lock(this->poseMsgMutex);
-    if (!this->poseMsg.has_value())
+    std::lock_guard<std::mutex> lock(this->quatMsgMutex);
+    if (!this->quatMsg.has_value())
     {
       return;
     }
-    thrustOrientation.thrust = this->poseMsg->position().z();
-    thrustOrientation.orientation = math::eigen3::convert(
-        math::Quaterniond(this->poseMsg->orientation().w(),
-                          this->poseMsg->orientation().x(),
-                          this->poseMsg->orientation().y(),
-                          this->poseMsg->orientation().z()));
+    rpyt.roll = this->quatMsg->x();
+    rpyt.pitch = this->quatMsg->y();
+    rpyt.yawRate = this->quatMsg->z();
+    rpyt.thrust = this->quatMsg->w();
   }
 
   std::optional<FrameData> frameData =
@@ -398,18 +396,18 @@ void MulticopterAttitudeControl::PreUpdate(
     return;
   }
 
-  this->attitudeController->CalculateRotorVelocities(*frameData, thrustOrientation.orientation, thrustOrientation.thrust,
+  this->attitudeController->CalculateRotorVelocities(*frameData, rpyt,
                                                      this->rotorVelocities);
 
   this->PublishRotorVelocities(_ecm, this->rotorVelocities);
 }
 
 //////////////////////////////////////////////////
-void MulticopterAttitudeControl::OnPose(
-    const msgs::Pose &_msg)
+void MulticopterAttitudeControl::OnQuat(
+    const msgs::Quaternion &_msg)
 {
-  std::lock_guard<std::mutex> lock(this->poseMsgMutex);
-  this->poseMsg = _msg;
+  std::lock_guard<std::mutex> lock(this->quatMsgMutex);
+  this->quatMsg = _msg;
 }
 
 //////////////////////////////////////////////////

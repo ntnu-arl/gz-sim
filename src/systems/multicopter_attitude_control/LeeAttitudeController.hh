@@ -69,8 +69,7 @@ namespace multicopter_control
     /// \param[out] _rotorVelocities Computed rotor velocities.
     public: void CalculateRotorVelocities(
                  const FrameData &_frameData,
-                 const Eigen::Quaterniond &_quatDes,
-                 const double &_thrust,
+                 const RollPitchYawRateThrust &_command,
                  Eigen::VectorXd &_rotorVelocities) const;
 
     /// \brief Private constructor. Use MakeController to create an instance of
@@ -80,7 +79,7 @@ namespace multicopter_control
     /// \brief Compute desired angular acceleration given the current frame
     /// data, comanded angular velocity
     private: Eigen::Vector3d ComputeDesiredAngularAcc(
-                 const FrameData &_frameData, const Eigen::Matrix3d &_rotDes) const;
+                 const FrameData &_frameData, const Eigen::Matrix3d &_rotDes, const double &_yawRate) const;
 
     /// \brief Initialize controller parameters
     /// \return True if successful.

@@ -48,17 +48,12 @@ namespace multicopter_control
   };
 
   /// \brief Struct containing thrust and orientation
-  struct EigenThrustOrientation
+  struct RollPitchYawRateThrust
   {
+    double roll;
+    double pitch;
+    double yawRate;
     double thrust;
-    Eigen::Quaterniond orientation;
-  };
-
-  /// \brief Struct containing the desired position and yaw of the robot in world frame
-  struct EigenPositionYaw
-  {
-    Eigen::Vector3d position;
-    double yaw;
   };
 
   /// \brief Frame data of a link including its pose and linear velocity in
