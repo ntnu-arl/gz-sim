@@ -144,9 +144,15 @@ Eigen::Vector3d LeePositionController::ComputeDesiredAngularAcc(
     const FrameData &_frameData, const EigenPositionYaw &_posYawDes,
     const Eigen::Vector3d &_acceleration) const
 {
-  const Eigen::Matrix3d& rot = _frameData.pose.linear();
+  Eigen::Matrix3d rot = _frameData.pose.linear();
 
-  const double currentYaw = rot.eulerAngles(2, 1, 0)[0];
+  // Get current yaw. Need to convert to math::Quaterniond to use the Yaw() since Eigen::eulerAngles has a weird behavior.
+  Eigen::Quaterniond currentEigenQuat = Eigen::Quaterniond(rot);
+  math::Quaterniond currentQuat(currentEigenQuat.w(), currentEigenQuat.x(), currentEigenQuat.y(), currentEigenQuat.z());
+  double yawCurrent = currentQuat.Yaw();
+
+  // Desired yaw
+  double yawDes = _posYawDes.yaw;
 
   // Get the desired rotation matrix.
   Eigen::Vector3d b1Des = rot.col(0);
@@ -183,11 +189,18 @@ Eigen::Vector3d LeePositionController::ComputeDesiredAngularAcc(
       0.5 * (rotDes.transpose() * rot - rot.transpose() * rotDes);
   Eigen::Vector3d angleError = vectorFromSkewMatrix(angleErrorMatrix);
 
+  double yawrate_error = yawDes - yawCurrent;
+
+  // Debug
+  if (yawrate_error > M_PI || yawrate_error < -M_PI)
+  {
+    gzerr << "Yaw rate error is greater than pi. yawrate_error: " << yawrate_error << std::endl;
+  }
+  
   Eigen::Vector3d angularRateDes(Eigen::Vector3d::Zero());
   // current yaw angle
   
-
-  angularRateDes[2] = (_posYawDes.yaw - currentYaw);
+  angularRateDes[2] = yawrate_error;
 
   // The paper shows
   // e_omega = omega - R.T * R_d * omega_des

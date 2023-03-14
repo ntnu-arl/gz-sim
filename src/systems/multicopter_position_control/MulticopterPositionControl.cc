@@ -402,12 +402,14 @@ void MulticopterPositionControl::PreUpdate(
     positionYaw.position = Eigen::Vector3d(this->poseMsg->position().x(),
                                                  this->poseMsg->position().y(),
                                                  this->poseMsg->position().z());
+    
+    // Eigen3 Quaterniond's eulerAngles() function returns something really weird. 
     // get yaw from orientation
-    Eigen::Quaterniond quat2 = Eigen::Quaterniond(this->poseMsg->orientation().w(),
-                                                this->poseMsg->orientation().x(),
-                                                this->poseMsg->orientation().y(),
-                                                this->poseMsg->orientation().z());
-    positionYaw.yaw = quat2.toRotationMatrix().eulerAngles(2, 1, 0)[0];
+    math::Quaterniond desired_quat(this->poseMsg->orientation().w(),
+                            this->poseMsg->orientation().x(),
+                            this->poseMsg->orientation().y(),
+                            this->poseMsg->orientation().z());
+    positionYaw.yaw = desired_quat.Yaw();
   }
 
   std::optional<FrameData> frameData =

@@ -16,6 +16,7 @@
  */
 
 #include "LeeAttitudeController.hh"
+#include <gz/math/eigen3/Conversions.hh>
 
 namespace gz
 {
@@ -98,15 +99,16 @@ void LeeAttitudeController::CalculateRotorVelocities(
                             -GZ_PI);
   double thrust = _command.thrust;
 
-  // get current yaw 
-  double currentYaw = _frameData.pose.linear().eulerAngles(2, 1, 0)[0];
+  // get current yaw. Need to convert to math::Quaterniond since Eigen::eulerAngles() has a weird behavior with order (2, 1, 0)
+  Eigen::Quaterniond currentEigenQuat(_frameData.pose.linear());
+  math::Quaterniond currentQuat(currentEigenQuat.w(), currentEigenQuat.x(), currentEigenQuat.y(), currentEigenQuat.z());
+  double currentYaw = currentQuat.Yaw();
   
   // define current desired rotation matrix from desired roll, desired pitch and current yaw
   Eigen::Matrix3d rotDes;
   rotDes = Eigen::AngleAxisd(currentYaw, Eigen::Vector3d::UnitZ()) *
            Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) *
            Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
-  
 
   Eigen::Vector3d angularAcceleration =
       this->ComputeDesiredAngularAcc(_frameData, rotDes, yawRate);
