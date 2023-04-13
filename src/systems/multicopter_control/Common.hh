@@ -47,6 +47,32 @@ namespace multicopter_control
     Eigen::Vector3d angular;
   };
 
+  /// \brief Struct containing position and orientation
+  struct EigenPose
+  {
+    Eigen::Vector3d position;
+    Eigen::Quaterniond orientation;
+  };
+
+  /// \brief Struct containing roll, pitch, yawrate and thrust
+  struct AttitudeCommand
+  {
+    double roll;
+    double pitch;
+    double yawRate;
+    double thrust;
+  };
+
+  /// \brief Meta command containing the desired input command based on the type of controller
+  struct Command
+  {
+    double command1;
+    double command2;
+    double command3;
+    double command4;
+  }
+  
+
   /// \brief Frame data of a link including its pose and linear velocity in
   /// world frame as well as its angular velocity in body frame
   struct FrameData

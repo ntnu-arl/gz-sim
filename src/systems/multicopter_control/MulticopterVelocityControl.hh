@@ -29,6 +29,8 @@
 
 #include "Common.hh"
 #include "LeeVelocityController.hh"
+#include "LeePositionController.hh"
+#include "LeeAttitudeController.hh"
 
 namespace gz
 {
@@ -220,6 +222,12 @@ namespace systems
     /// \brief Velocity controller
     private: std::unique_ptr<multicopter_control::LeeVelocityController>
                  velocityController;
+    
+    private: std::unique_ptr<multicopter_control::LeePositionController>
+                 positionController;
+    
+    private: std::unique_ptr<multicopter_control::LeeAttitudeController>
+                 attitudeController;
 
     /// \brief Noise parameters read from SDF
     private: multicopter_control::NoiseParameters noiseParameters;
