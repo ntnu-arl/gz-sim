@@ -64,13 +64,18 @@ namespace multicopter_control
   };
 
   /// \brief Meta command containing the desired input command based on the type of controller
-  struct Command
+  struct EigenCommand
   {
-    double command1;
-    double command2;
-    double command3;
-    double command4;
-  }
+    Eigen::Vector3d vectorCommand;
+    double scalarCommand;
+  };
+
+  enum ControllerMode
+  {
+    kVelocityControl=0,
+    kAttitudeControl,
+    kPositionControl
+  };
   
 
   /// \brief Frame data of a link including its pose and linear velocity in

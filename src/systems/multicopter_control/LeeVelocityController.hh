@@ -23,6 +23,7 @@
 #include "gz/sim/config.hh"
 
 #include "Common.hh"
+#include "LeeController.hh"
 #include "LeeVelocityController.hh"
 
 namespace gz
@@ -35,21 +36,11 @@ namespace systems
 {
 namespace multicopter_control
 {
-  /// \brief Data structure containing various parameters for the Lee velocity
-  /// controller
-  struct LeeVelocityControllerParameters
-  {
-    Eigen::Vector3d velocityGain;
-    Eigen::Vector3d attitudeGain;
-    Eigen::Vector3d angularRateGain;
-    Eigen::Vector3d maxLinearAcceleration;
-  };
-
   /// This controller is inspired by the LeePositionController from RotorS
   /// https://github.com/ethz-asl/rotors_simulator/blob/master/rotors_control/include/rotors_control/lee_position_controller.h
   /// The controller can be used to command linear velocity and yaw angle
   /// velocity expressed in the body frame.
-  class LeeVelocityController
+  class LeeVelocityController : public LeeController
   {
     /// \brief Factory function to create LeeVelocityController objects
     /// \param[in] _controllerParams Controller parameteres
@@ -57,7 +48,7 @@ namespace multicopter_control
     /// \returns nullptr if the input parameters were valid, otherwise an
     /// pointer to an instance of LeeVelocityController
     public: static std::unique_ptr<LeeVelocityController> MakeController(
-                const LeeVelocityControllerParameters &_controllerParams,
+                const LeeControllerParameters &_controllerParams,
                 const VehicleParameters &_vehicleParams);
 
     /// \brief Calculate rotor velocities given the current frame data and the
@@ -91,7 +82,7 @@ namespace multicopter_control
     private: bool InitializeParameters();
 
     /// \brief Velocity controller parameters
-    private: LeeVelocityControllerParameters controllerParameters;
+    private: LeeControllerParameters controllerParameters;
 
     /// \brief Parameters of the whole vehicle
     private: VehicleParameters vehicleParameters;

@@ -278,6 +278,7 @@ std::optional<FrameData> getFrameData(const EntityComponentManager &_ecm,
        math::eigen3::convert(velComp->Data()),
        math::eigen3::convert(angVelComp->Data())});
 
+  // applyNoise(Eigen::Vector3d(frameData->pose.translation()), _noise.positionMean, _noise.positionStdDev); // TODO @mihirK284 Make sure this makes sense
   applyNoise(frameData->linearVelocityWorld, _noise.linearVelocityMean,
              _noise.linearVelocityStdDev);
   applyNoise(frameData->angularVelocityBody, _noise.angularVelocityMean,

@@ -83,6 +83,8 @@ namespace multicopter_control
   /// assumed to be gaussian.
   struct NoiseParameters
   {
+    Eigen::Vector3d positionMean;
+    Eigen::Vector3d positionStdDev;
     Eigen::Vector3d linearVelocityMean;
     Eigen::Vector3d linearVelocityStdDev;
     Eigen::Vector3d angularVelocityMean;

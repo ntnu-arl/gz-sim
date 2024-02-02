@@ -44,7 +44,6 @@
 
 #include "MulticopterVelocityControl.hh"
 
-
 using namespace gz;
 using namespace sim;
 using namespace systems;
@@ -52,16 +51,16 @@ using namespace multicopter_control;
 
 //////////////////////////////////////////////////
 void MulticopterVelocityControl::Configure(const Entity &_entity,
-    const std::shared_ptr<const sdf::Element> &_sdf,
-    EntityComponentManager &_ecm,
-    EventManager &/*_eventMgr*/)
+                                           const std::shared_ptr<const sdf::Element> &_sdf,
+                                           EntityComponentManager &_ecm,
+                                           EventManager & /*_eventMgr*/)
 {
   this->model = Model(_entity);
 
   if (!this->model.Valid(_ecm))
   {
     gzerr << "MulticopterVelocityControl plugin should be attached to a model "
-           << "entity. Failed to initialize." << std::endl;
+          << "entity. Failed to initialize." << std::endl;
     return;
   }
 
@@ -84,7 +83,7 @@ void MulticopterVelocityControl::Configure(const Entity &_entity,
   if (this->comLinkEntity == kNullEntity)
   {
     gzerr << "Link " << this->comLinkName
-           << " could not be found. Failed to initialize.\n";
+          << " could not be found. Failed to initialize.\n";
     return;
   }
 
@@ -139,17 +138,58 @@ void MulticopterVelocityControl::Configure(const Entity &_entity,
 
   vehicleParams.gravity = math::eigen3::convert(gravityComp->Data());
 
-  LeeVelocityControllerParameters controllerParameters;
+  LeeControllerParameters controllerParameters;
 
-  if (sdfClone->HasElement("velocityGain"))
+  if (sdfClone->HasElement("controllerMode"))
   {
-    controllerParameters.velocityGain =
-        math::eigen3::convert(sdfClone->Get<math::Vector3d>("velocityGain"));
+    std::string mode = sdfClone->Get<std::string>("controllerMode");
+    if (mode == "velocityControl")
+    {
+      controllerParameters.mode = ControllerMode::kVelocityControl;
+    }
+    else if (mode == "attitudeContol")
+    {
+      controllerParameters.mode = ControllerMode::kAttitudeControl;
+    }
+    else if (mode == "positionControl")
+    {
+      controllerParameters.mode = ControllerMode::kPositionControl;
+    }
+    else
+    {
+      gzwarn << "Specified mode " << mode << " is not among velocityControl, attitudeControl or positionControl. Setting default mode as velocityControl\n";
+      controllerParameters.mode = ControllerMode::kVelocityControl;
+    }
   }
-  else
+
+  if (controllerParameters.mode == ControllerMode::kPositionControl)
   {
-    gzerr << "Please specify velocityGain for MulticopterVelocityControl.\n";
-    return;
+    if (sdfClone->HasElement("positionGain"))
+    {
+      controllerParameters.positionGain =
+          math::eigen3::convert(sdfClone->Get<math::Vector3d>("positionGain"));
+      controllerParameters.velocityGain = Eigen::Vector3d::Zero();
+    }
+    else
+    {
+      gzerr << "Please specify positionGain for MulticopterVelocityControl.\n";
+      return;
+    }
+  }
+
+  if (controllerParameters.mode == ControllerMode::kVelocityControl)
+  {
+    if (sdfClone->HasElement("velocityGain"))
+    {
+      controllerParameters.velocityGain =
+          math::eigen3::convert(sdfClone->Get<math::Vector3d>("velocityGain"));
+      controllerParameters.positionGain = Eigen::Vector3d::Zero();
+    }
+    else
+    {
+      gzerr << "Please specify velocityGain for MulticopterVelocityControl.\n";
+      return;
+    }
   }
 
   if (sdfClone->HasElement("attitudeGain"))
@@ -211,31 +251,58 @@ void MulticopterVelocityControl::Configure(const Entity &_entity,
         std::numeric_limits<double>::max());
   }
 
-  this->velocityController = LeeVelocityController::MakeController(
-      controllerParameters, vehicleParams);
-
-  if (nullptr == this->velocityController)
+  switch (controllerParameters.mode)
   {
-    gzerr << "Error while creating the LeeVelocityController\n";
+  case ControllerMode::kVelocityControl:
+    this->controller = LeeVelocityController::MakeController(controllerParameters,
+                                                             vehicleParams);
+    break;
+  // case ControllerMode::kPositionControl:
+  //   this->controller = LeePositionController::MakeController(controllerParameters,
+  //                                                            vehicleParams);
+  //   break;
+  // case ControllerMode::kAttitudeControl:
+  //   this->controller = LeeAttitudeController::MakeController(controllerParameters,
+  //                                                            vehicleParams);
+  // break;
+  default:
+    break;
+  }
+
+  if (nullptr == this->controller)
+  {
+    gzerr << "Error while creating the LeeController\n";
     return;
   }
 
+  math::Vector3d positionMean{0, 0, 0};
+  sdfClone->Get<math::Vector3d>("positionNoiseMean",
+                                positionMean, positionMean);
+
+  math::Vector3d positionStdDev{0, 0, 0};
+  sdfClone->Get<math::Vector3d>("positionNoiseStdDev",
+                                positionStdDev, positionStdDev);
+
   math::Vector3d linearVelocityMean{0, 0, 0};
   sdfClone->Get<math::Vector3d>("linearVelocityNoiseMean",
-      linearVelocityMean, linearVelocityMean);
+                                linearVelocityMean, linearVelocityMean);
 
   math::Vector3d linearVelocityStdDev{0, 0, 0};
   sdfClone->Get<math::Vector3d>("linearVelocityNoiseStdDev",
-      linearVelocityStdDev, linearVelocityStdDev);
+                                linearVelocityStdDev, linearVelocityStdDev);
 
   math::Vector3d angularVelocityMean{0, 0, 0};
   sdfClone->Get<math::Vector3d>("angularVelocityNoiseMean",
-      angularVelocityMean, angularVelocityMean);
+                                angularVelocityMean, angularVelocityMean);
 
   math::Vector3d angularVelocityStdDev{0, 0, 0};
   sdfClone->Get<math::Vector3d>("angularVelocityNoiseStdDev",
-      angularVelocityStdDev, angularVelocityStdDev);
+                                angularVelocityStdDev, angularVelocityStdDev);
 
+  this->noiseParameters.positionMean =
+      math::eigen3::convert(positionMean);
+  this->noiseParameters.positionStdDev =
+      math::eigen3::convert(positionStdDev);
   this->noiseParameters.linearVelocityMean =
       math::eigen3::convert(linearVelocityMean);
   this->noiseParameters.linearVelocityStdDev =
@@ -252,8 +319,8 @@ void MulticopterVelocityControl::Configure(const Entity &_entity,
     if (this->robotNamespace.empty())
     {
       gzerr << "Robot namespace ["
-             << sdfClone->Get<std::string>("robotNamespace") <<"] is invalid."
-             << std::endl;
+            << sdfClone->Get<std::string>("robotNamespace") << "] is invalid."
+            << std::endl;
       return;
     }
   }
@@ -264,7 +331,7 @@ void MulticopterVelocityControl::Configure(const Entity &_entity,
   }
 
   sdfClone->Get<std::string>("commandSubTopic",
-      this->commandSubTopic, this->commandSubTopic);
+                             this->commandSubTopic, this->commandSubTopic);
   this->commandSubTopic = transport::TopicUtils::AsValidTopic(
       this->commandSubTopic);
   if (this->commandSubTopic.empty())
@@ -274,7 +341,7 @@ void MulticopterVelocityControl::Configure(const Entity &_entity,
   }
 
   sdfClone->Get<std::string>("enableSubTopic",
-      this->enableSubTopic, this->enableSubTopic);
+                             this->enableSubTopic, this->enableSubTopic);
   this->enableSubTopic = transport::TopicUtils::AsValidTopic(
       this->enableSubTopic);
   if (this->enableSubTopic.empty())
@@ -288,13 +355,13 @@ void MulticopterVelocityControl::Configure(const Entity &_entity,
 
   this->node.Subscribe(topic, &MulticopterVelocityControl::OnTwist, this);
   gzmsg << "MulticopterVelocityControl subscribing to Twist messages on ["
-         << topic << "]" << std::endl;
+        << topic << "]" << std::endl;
 
   std::string enableTopic{this->robotNamespace + "/" + this->enableSubTopic};
   this->node.Subscribe(enableTopic, &MulticopterVelocityControl::OnEnable,
                        this);
   gzmsg << "MulticopterVelocityControl subscribing to Boolean messages on ["
-         << enableTopic << "]" << std::endl;
+        << enableTopic << "]" << std::endl;
 
   // Create the Actuators component to take control of rotor speeds
   this->rotorVelocitiesMsg.mutable_velocity()->Resize(
@@ -319,7 +386,7 @@ math::Inertiald MulticopterVelocityControl::VehicleInertial(
     if (nullptr == inertial)
     {
       gzerr << "Could not find inertial component on link "
-             << this->comLinkName << std::endl;
+            << this->comLinkName << std::endl;
       return vehicleInertial;
     }
     vehicleInertial += inertial->Data();
@@ -349,8 +416,8 @@ void MulticopterVelocityControl::PreUpdate(
   if (_info.dt < std::chrono::steady_clock::duration::zero())
   {
     gzwarn << "Detected jump back in time ["
-        << std::chrono::duration_cast<std::chrono::seconds>(_info.dt).count()
-        << "s]. System may not work properly." << std::endl;
+           << std::chrono::duration_cast<std::chrono::seconds>(_info.dt).count()
+           << "s]. System may not work properly." << std::endl;
   }
 
   // Nothing left to do if paused.
@@ -404,7 +471,7 @@ void MulticopterVelocityControl::PreUpdate(
     return;
   }
 
-  this->velocityController->CalculateRotorVelocities(*frameData, cmdVel,
+  this->controller->CalculateRotorVelocities(*frameData, cmdVel,
                                                      this->rotorVelocities);
 
   this->PublishRotorVelocities(_ecm, this->rotorVelocities);
@@ -464,9 +531,9 @@ void MulticopterVelocityControl::PublishRotorVelocities(
 }
 
 GZ_ADD_PLUGIN(MulticopterVelocityControl,
-                    System,
-                    MulticopterVelocityControl::ISystemConfigure,
-                    MulticopterVelocityControl::ISystemPreUpdate)
+              System,
+              MulticopterVelocityControl::ISystemConfigure,
+              MulticopterVelocityControl::ISystemPreUpdate)
 
 GZ_ADD_PLUGIN_ALIAS(
     MulticopterVelocityControl,

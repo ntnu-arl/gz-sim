@@ -29,8 +29,8 @@
 
 #include "Common.hh"
 #include "LeeVelocityController.hh"
-#include "LeePositionController.hh"
-#include "LeeAttitudeController.hh"
+// #include "LeePositionController.hh"
+// #include "LeeAttitudeController.hh"
 
 namespace gz
 {
@@ -219,15 +219,18 @@ namespace systems
     /// here so we don't need to allocate memory every simulation step.
     private: Eigen::VectorXd rotorVelocities;
 
-    /// \brief Velocity controller
-    private: std::unique_ptr<multicopter_control::LeeVelocityController>
-                 velocityController;
+    // /// \brief Velocity controller
+    // private: std::unique_ptr<multicopter_control::LeeVelocityController>
+    //              velocityController;
     
-    private: std::unique_ptr<multicopter_control::LeePositionController>
-                 positionController;
+    // private: std::unique_ptr<multicopter_control::LeePositionController>
+    //              positionController;
     
-    private: std::unique_ptr<multicopter_control::LeeAttitudeController>
-                 attitudeController;
+    // private: std::unique_ptr<multicopter_control::LeeAttitudeController>
+    //              attitudeController;
+    
+    /// \brief Pointer to the controller class
+    private: std::unique_ptr<multicopter_control::LeeController> controller;
 
     /// \brief Noise parameters read from SDF
     private: multicopter_control::NoiseParameters noiseParameters;

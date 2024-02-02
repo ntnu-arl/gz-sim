@@ -39,6 +39,7 @@ namespace multicopter_control
   /// controller
   struct LeeControllerParameters
   {
+    ControllerMode mode;
     Eigen::Vector3d positionGain;
     Eigen::Vector3d velocityGain;
     Eigen::Vector3d attitudeGain;
@@ -72,6 +73,13 @@ namespace multicopter_control
     public: virtual void CalculateRotorVelocities(
                  const FrameData &_frameData,
                  const EigenTwist &_cmdVel,
+                 Eigen::VectorXd &_rotorVelocities) const;
+    
+    /// \brief Calculate rotor velocities given the desired angular acceleration and thrust
+    /// \param[in] _angularAccThrust desired angular acceleration and thrust
+    /// \param[out] _rotorVelocities Computed rotor velocities.
+    public: void CalculateRotorVelocitiesFromAngAccThrust(
+                 const EigenVector4d &_angAccThrust,
                  Eigen::VectorXd &_rotorVelocities) const;
 
     /// \brief Private constructor. Use MakeController to create an instance of
