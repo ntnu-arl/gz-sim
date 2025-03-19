@@ -196,6 +196,15 @@ Eigen::Vector3d LeePositionController::ComputeDesiredAngularAcc(
   {
     gzerr << "Yaw rate error is greater than pi. yawrate_error: " << yawrate_error << std::endl;
   }
+
+  if (yawrate_error < -M_PI)
+  {
+		yawrate_error += 2 * M_PI;
+  }
+	else if (yawrate_error > M_PI)
+  {
+		yawrate_error -= 2*M_PI;
+  }
   
   Eigen::Vector3d angularRateDes(Eigen::Vector3d::Zero());
   // current yaw angle
