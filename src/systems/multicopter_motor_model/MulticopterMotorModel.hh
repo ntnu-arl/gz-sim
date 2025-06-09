@@ -57,6 +57,7 @@ namespace systems
 
     /// \brief Private data pointer
     private: std::unique_ptr<MulticopterMotorModelPrivate> dataPtr;
+
   };
   }
 }

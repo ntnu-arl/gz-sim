@@ -220,6 +220,8 @@ class gz::sim::systems::MulticopterMotorModelPrivate
 
   /// \brief Gazebo communication node.
   public: transport::Node node;
+
+  private: bool foo = false;
 };
 
 //////////////////////////////////////////////////
@@ -494,21 +496,32 @@ void MulticopterMotorModelPrivate::UpdateForcesAndMoments(
   auto actuatorMsgComp =
       _ecm.Component<components::Actuators>(this->model.Entity());
 
-  // Actuators messages can come in from transport or via a component. If a
-  // component is available, it takes precedence.
-  if (actuatorMsgComp)
+  std::lock_guard<std::mutex> lock(this->recvdActuatorsMsgMutex);
+  if (this->recvdActuatorsMsg.has_value())
   {
-    msg = actuatorMsgComp->Data();
-  }
-  else
-  {
-    std::lock_guard<std::mutex> lock(this->recvdActuatorsMsgMutex);
-    if (this->recvdActuatorsMsg.has_value())
-    {
       msg = *this->recvdActuatorsMsg;
       this->recvdActuatorsMsg.reset();
-    }
+      foo = true;
   }
+  else if (!foo && actuatorMsgComp)
+  {
+      msg = actuatorMsgComp->Data();
+  }
+  // // Actuators messages can come in from transport or via a component. If a
+  // // component is available, it takes precedence.
+  // if (actuatorMsgComp)
+  // {
+  //   msg = actuatorMsgComp->Data();
+  // }
+  // else
+  // {
+  //   std::lock_guard<std::mutex> lock(this->recvdActuatorsMsgMutex);
+  //   if (this->recvdActuatorsMsg.has_value())
+  //   {
+  //     msg = *this->recvdActuatorsMsg;
+  //     this->recvdActuatorsMsg.reset();
+  //   }
+  // }
 
   if (msg.has_value())
   {
