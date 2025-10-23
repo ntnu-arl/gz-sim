@@ -204,6 +204,8 @@ void PosePublisher::Configure(const Entity &_entity,
 
   // for backward compatibility, publish_model_pose will be set to the
   // same value as publish_nested_model_pose if it is not specified.
+  // todo(iche033) Remove backward compatibility and decouple model and
+  // nested model pose parameter value in gz-sim10
   this->dataPtr->publishModelPose =
     _sdf->Get<bool>("publish_model_pose",
         this->dataPtr->publishNestedModelPose).first;
@@ -252,8 +254,7 @@ void PosePublisher::Configure(const Entity &_entity,
   this->dataPtr->usePoseV =
     _sdf->Get<bool>("use_pose_vector_msg", this->dataPtr->usePoseV).first;
 
-  std::string poseTopic = scopedName(_entity, _ecm) + "/pose";
-  poseTopic = transport::TopicUtils::AsValidTopic(poseTopic);
+  std::string poseTopic = topicFromScopedName(_entity, _ecm, false) + "/pose";
   if (poseTopic.empty())
   {
     poseTopic = "/pose";
@@ -297,8 +298,8 @@ void PosePublisher::PostUpdate(const UpdateInfo &_info,
   if (_info.dt < std::chrono::steady_clock::duration::zero())
   {
     gzwarn << "Detected jump back in time ["
-        << std::chrono::duration_cast<std::chrono::seconds>(_info.dt).count()
-        << "s]. System may not work properly." << std::endl;
+           << std::chrono::duration<double>(_info.dt).count()
+           << "s]. System may not work properly." << std::endl;
   }
 
   // Nothing left to do if paused.
@@ -395,9 +396,6 @@ void PosePublisherPrivate::InitializeEntitiesToPublish(
         (collision && this->publishCollisionPose) ||
         (sensor && this->publishSensorPose);
 
-    // for backward compatibility, top level model pose will be published
-    // if publishNestedModelPose is set to true unless the user explicity
-    // disables this by setting publishModelPose to false
     if (isModel)
     {
       if (parent)
@@ -405,10 +403,8 @@ void PosePublisherPrivate::InitializeEntitiesToPublish(
         auto nestedModel = _ecm.Component<components::Model>(parent->Data());
         if (nestedModel)
           fillPose = this->publishNestedModelPose;
-      }
-      if (!fillPose)
-      {
-        fillPose = this->publishNestedModelPose && this->publishModelPose;
+        else
+          fillPose = this->publishModelPose;
       }
     }
 

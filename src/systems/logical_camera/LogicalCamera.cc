@@ -134,8 +134,8 @@ void LogicalCamera::PostUpdate(const UpdateInfo &_info,
   if (_info.dt < std::chrono::steady_clock::duration::zero())
   {
     gzwarn << "Detected jump back in time ["
-        << std::chrono::duration_cast<std::chrono::seconds>(_info.dt).count()
-        << "s]. System may not work properly." << std::endl;
+           << std::chrono::duration<double>(_info.dt).count()
+           << "s]. System may not work properly." << std::endl;
   }
 
   this->dataPtr->CreateSensors(_ecm);
@@ -255,18 +255,14 @@ void LogicalCameraPrivate::UpdateLogicalCameras(
   GZ_PROFILE("LogicalCameraPrivate::UpdateLogicalCameras");
   std::map<std::string, math::Pose3d> modelPoses;
 
-  _ecm.Each<components::Model, components::Name, components::Pose>(
-      [&](const Entity &,
-        const components::Model *,
-        const components::Name *_name,
-        const components::Pose *_pose)->bool
-      {
-        /// todo(anyone) We currently assume there are only top level models
-        /// Update to retrieve world pose when nested models are supported.
-        modelPoses[_name->Data()] = _pose->Data();
-        return true;
-      });
-
+  _ecm.Each<components::Model, components::Name>(
+    [&](const Entity &_entity,
+      const components::Model *,
+      const components::Name *_name)->bool
+    {
+      modelPoses[_name->Data()] = worldPose(_entity, _ecm);
+      return true;
+    });
 
   _ecm.Each<components::LogicalCamera, components::WorldPose>(
     [&](const Entity &_entity,

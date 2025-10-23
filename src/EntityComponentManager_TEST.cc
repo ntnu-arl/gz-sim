@@ -15,6 +15,7 @@
  *
 */
 
+#include <optional>
 #include <gtest/gtest.h>
 
 #include <gz/common/Console.hh>
@@ -1936,7 +1937,7 @@ TEST_P(EntityComponentManagerFixture, GZ_UTILS_TEST_DISABLED_ON_WIN32(State))
 
 /////////////////////////////////////////////////
 TEST_P(EntityComponentManagerFixture,
-       GZ_UTILS_TEST_DISABLED_ON_WIN32(ChangedStateComponents))
+       GZ_UTILS_TEST_ENABLED_ONLY_ON_LINUX(ChangedStateComponents))
 {
   // Entity and component
   Entity e1{1};
@@ -3335,7 +3336,7 @@ TEST_P(EntityComponentManagerFixture, ResetToWithAddedEntity)
 
 //////////////////////////////////////////////////
 TEST_P(EntityComponentManagerFixture,
-    GZ_UTILS_TEST_DISABLED_ON_WIN32(AddRemoveAddComponentsStateMap))
+    GZ_UTILS_TEST_ENABLED_ONLY_ON_LINUX(AddRemoveAddComponentsStateMap))
 {
   Entity e1 = manager.CreateEntity();
   EXPECT_EQ(1u, manager.EntityCount());
@@ -3419,6 +3420,23 @@ TEST_P(EntityComponentManagerFixture,
   comp = manager.Component<IntComponent>(e1);
   ASSERT_NE(nullptr, comp);
   EXPECT_EQ(321, comp->Data());
+}
+
+//////////////////////////////////////////////////
+TEST_P(EntityComponentManagerFixture, EntityByName)
+{
+  // Create an entity, and give it a name
+  Entity entity = manager.CreateEntity();
+  manager.CreateComponent(entity, components::Name("entity_name_a"));
+
+  // Try to get an entity that doesn't exist
+  std::optional<Entity> entityByName = manager.EntityByName("a_bad_name");
+  EXPECT_FALSE(entityByName);
+
+  entityByName = manager.EntityByName("entity_name_a");
+  EXPECT_TRUE(entityByName);
+  CompareEntityComponents<components::Name>(manager, entity,
+    *entityByName, true);
 }
 
 // Run multiple times. We want to make sure that static globals don't cause

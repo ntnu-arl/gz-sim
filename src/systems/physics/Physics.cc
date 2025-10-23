@@ -53,6 +53,7 @@
 #include <gz/physics/RequestEngine.hh>
 
 #include <gz/physics/BoxShape.hh>
+#include <gz/physics/ConeShape.hh>
 #include <gz/physics/ContactProperties.hh>
 #include <gz/physics/CylinderShape.hh>
 #include <gz/physics/ForwardStep.hh>
@@ -62,6 +63,7 @@
 #include <gz/physics/GetContacts.hh>
 #include <gz/physics/GetBoundingBox.hh>
 #include <gz/physics/GetEntities.hh>
+#include <gz/physics/GetRayIntersection.hh>
 #include <gz/physics/Joint.hh>
 #include <gz/physics/Link.hh>
 #include <gz/physics/RemoveEntities.hh>
@@ -91,7 +93,9 @@
 #include <sdf/World.hh>
 
 #include "gz/sim/EntityComponentManager.hh"
+#include "gz/sim/Link.hh"
 #include "gz/sim/Model.hh"
+#include "gz/sim/System.hh"
 #include "gz/sim/Util.hh"
 
 // Components
@@ -128,6 +132,7 @@
 #include "gz/sim/components/Name.hh"
 #include "gz/sim/components/ParentEntity.hh"
 #include "gz/sim/components/ParentLinkName.hh"
+#include "gz/sim/components/RaycastData.hh"
 #include "gz/sim/components/ExternalWorldWrenchCmd.hh"
 #include "gz/sim/components/JointTransmittedWrench.hh"
 #include "gz/sim/components/JointForceCmd.hh"
@@ -310,6 +315,10 @@ class gz::sim::systems::PhysicsPrivate
   /// \param[in] _ecm Mutable reference to ECM.
   public: void UpdateCollisions(EntityComponentManager &_ecm);
 
+  /// \brief Update ray intersection components from physics simulation
+  /// \param[in] _ecm Mutable reference to ECM.
+  public: void UpdateRayIntersections(EntityComponentManager &_ecm);
+
   /// \brief FrameData relative to world at a given offset pose
   /// \param[in] _link gz-physics link
   /// \param[in] _pose Offset pose in which to compute the frame data
@@ -332,6 +341,14 @@ class gz::sim::systems::PhysicsPrivate
   /// \brief Disable contact surface customization for the given world.
   /// \param[in] _world The world to disable it for.
   public: void DisableContactSurfaceCustomization(const Entity &_world);
+
+  /// \brief Update the AxisAlignedBox for link entities.
+  /// \param[in] _ecm The entity component manager.
+  public: void UpdateLinksBoundingBoxes(EntityComponentManager &_ecm);
+
+  /// \brief Update the AxisAlignedBox for model entities.
+  /// \param[in] _ecm The entity component manager.
+  public: void UpdateModelsBoundingBoxes(EntityComponentManager &_ecm);
 
   /// \brief Cache the top-level model for each entity.
   /// The key is an entity and the value is its top level model.
@@ -431,7 +448,7 @@ class gz::sim::systems::PhysicsPrivate
                       }
                       return true;
                     }};
-  /// \brief msgs::Contacts equality comparison function.
+  /// \brief msgs::Wrench equality comparison function.
   public: std::function<bool(const msgs::Wrench &, const msgs::Wrench &)>
           wrenchEql{
           [](const msgs::Wrench &_a, const msgs::Wrench &_b)
@@ -512,6 +529,11 @@ class gz::sim::systems::PhysicsPrivate
             CollisionFeatureList,
             physics::GetContactsFromLastStepFeature>{};
 
+  /// \brief Feature list to handle ray intersection information.
+  public: struct RayIntersectionFeatureList : physics::FeatureList<
+            MinimumFeatureList,
+            physics::GetRayIntersectionFromLastStepFeature>{};
+
   /// \brief Feature list to change contacts before they are applied to physics.
   public: struct SetContactPropertiesCallbackFeatureList :
             physics::FeatureList<
@@ -542,12 +564,18 @@ class gz::sim::systems::PhysicsPrivate
 
 
   //////////////////////////////////////////////////
-  // Bounding box
+  // Model Bounding box
   /// \brief Feature list for model bounding box.
-  public: struct BoundingBoxFeatureList : physics::FeatureList<
+  public: struct ModelBoundingBoxFeatureList : physics::FeatureList<
             MinimumFeatureList,
             physics::GetModelBoundingBox>{};
 
+  //////////////////////////////////////////////////
+  // Link Bounding box
+  /// \brief Feature list for model bounding box.
+  public: struct LinkBoundingBoxFeatureList : physics::FeatureList<
+            MinimumFeatureList,
+            physics::GetLinkBoundingBox>{};
 
   //////////////////////////////////////////////////
   // Joint velocity command
@@ -622,6 +650,14 @@ class gz::sim::systems::PhysicsPrivate
             gz::physics::Solver>{};
 
   //////////////////////////////////////////////////
+  // CollisionPairMaxContacts
+  /// \brief Feature list for setting and getting the max total contacts for
+  /// collision pairs
+  public: struct CollisionPairMaxContactsFeatureList :
+            gz::physics::FeatureList<
+            gz::physics::CollisionPairMaxContacts>{};
+
+  //////////////////////////////////////////////////
   // Nested Models
 
   /// \brief Feature list to construct nested models
@@ -642,11 +678,13 @@ class gz::sim::systems::PhysicsPrivate
           MinimumFeatureList,
           CollisionFeatureList,
           ContactFeatureList,
+          RayIntersectionFeatureList,
           SetContactPropertiesCallbackFeatureList,
           NestedModelFeatureList,
           CollisionDetectorFeatureList,
           SolverFeatureList,
-          WorldModelFeatureList
+          WorldModelFeatureList,
+          CollisionPairMaxContactsFeatureList
           >;
 
   /// \brief A map between world entity ids in the ECM to World Entities in
@@ -658,7 +696,7 @@ class gz::sim::systems::PhysicsPrivate
             physics::Model,
             MinimumFeatureList,
             JointFeatureList,
-            BoundingBoxFeatureList,
+            ModelBoundingBoxFeatureList,
             NestedModelFeatureList,
             ConstructSdfLinkFeatureList,
             ConstructSdfJointFeatureList>;
@@ -675,7 +713,8 @@ class gz::sim::systems::PhysicsPrivate
             CollisionFeatureList,
             HeightmapFeatureList,
             LinkForceFeatureList,
-            MeshFeatureList>;
+            MeshFeatureList,
+            LinkBoundingBoxFeatureList>;
 
   /// \brief A map between link entity ids in the ECM to Link Entities in
   /// gz-physics.
@@ -1025,6 +1064,33 @@ void PhysicsPrivate::CreateWorldEntities(const EntityComponentManager &_ecm,
           }
         }
 
+        auto physicsComp =
+            _ecm.Component<components::Physics>(_entity);
+        if (physicsComp)
+        {
+          auto maxContactsFeature =
+              this->entityWorldMap.EntityCast<
+              CollisionPairMaxContactsFeatureList>(_entity);
+          if (!maxContactsFeature)
+          {
+            static bool informed{false};
+            if (!informed)
+            {
+              gzdbg << "Attempting to set physics options, but the "
+                     << "phyiscs engine doesn't support feature "
+                     << "[CollisionPairMaxContacts]. "
+                     << "Options will be ignored."
+                     << std::endl;
+              informed = true;
+            }
+          }
+          else
+          {
+            maxContactsFeature->SetCollisionPairMaxContacts(
+              physicsComp->Data().MaxContacts());
+          }
+        }
+
         // World Model proxy (used for joints directly under <world> in SDF)
         auto worldModelFeature =
             this->entityWorldMap.EntityCast<WorldModelFeatureList>(_entity);
@@ -1284,6 +1350,15 @@ void PhysicsPrivate::CreateLinkEntities(const EntityComponentManager &_ecm,
         if (inertial)
         {
           link.SetInertial(inertial->Data());
+        }
+
+        // get link gravity
+        const components::GravityEnabled *gravityEnabled =
+            _ecm.Component<components::GravityEnabled>(_entity);
+        if (nullptr != gravityEnabled)
+        {
+          // gravityEnabled set in SdfEntityCreator::CreateEntities()
+          link.SetEnableGravity(gravityEnabled->Data());
         }
 
         auto constructLinkFeature =
@@ -2357,6 +2432,14 @@ void PhysicsPrivate::UpdatePhysics(EntityComponentManager &_ecm)
                  << std::endl;
           return true;
         }
+        math::Pose3d worldPoseCmd = _poseCmd->Data();
+        if (!worldPoseCmd.Pos().IsFinite() || !worldPoseCmd.Rot().IsFinite() ||
+            worldPoseCmd.Rot() == math::Quaterniond::Zero)
+        {
+          gzerr << "Unable to set world pose. Invalid pose value: "
+                << worldPoseCmd << std::endl;
+          return true;
+        }
 
         // TODO(addisu) Store the free group instead of searching for it at
         // every iteration
@@ -2376,7 +2459,7 @@ void PhysicsPrivate::UpdatePhysics(EntityComponentManager &_ecm)
         math::Pose3d linkPose =
             this->RelativePose(_entity, linkEntity, _ecm);
 
-        freeGroup->SetWorldPose(math::eigen3::convert(_poseCmd->Data() *
+        freeGroup->SetWorldPose(math::eigen3::convert(worldPoseCmd *
                                 linkPose));
 
         // Process pose commands for static models here, as one-time changes
@@ -2385,7 +2468,7 @@ void PhysicsPrivate::UpdatePhysics(EntityComponentManager &_ecm)
           auto worldPoseComp = _ecm.Component<components::Pose>(_entity);
           if (worldPoseComp)
           {
-            auto state = worldPoseComp->SetData(_poseCmd->Data(),
+            auto state = worldPoseComp->SetData(worldPoseCmd,
                 this->pose3Eql) ?
                 ComponentState::OneTimeChange :
                 ComponentState::NoChange;
@@ -2645,46 +2728,8 @@ void PhysicsPrivate::UpdatePhysics(EntityComponentManager &_ecm)
 
 
   // Populate bounding box info
-  // Only compute bounding box if component exists to avoid unnecessary
-  // computations
-  _ecm.Each<components::Model, components::AxisAlignedBox>(
-      [&](const Entity &_entity, const components::Model *,
-          components::AxisAlignedBox *_bbox)
-      {
-        if (!this->entityModelMap.HasEntity(_entity))
-        {
-          gzwarn << "Failed to find model [" << _entity << "]." << std::endl;
-          return true;
-        }
-
-        auto bbModel =
-            this->entityModelMap.EntityCast<BoundingBoxFeatureList>(_entity);
-
-        if (!bbModel)
-        {
-          static bool informed{false};
-          if (!informed)
-          {
-            gzdbg << "Attempting to get a bounding box, but the physics "
-                   << "engine doesn't support feature "
-                   << "[GetModelBoundingBox]. Bounding box won't be populated."
-                   << std::endl;
-            informed = true;
-          }
-
-          // Break Each call since no AxisAlignedBox'es can be processed
-          return false;
-        }
-
-        math::AxisAlignedBox bbox =
-            math::eigen3::convert(bbModel->GetAxisAlignedBoundingBox());
-        auto state = _bbox->SetData(bbox, this->axisAlignedBoxEql) ?
-            ComponentState::PeriodicChange :
-            ComponentState::NoChange;
-        _ecm.SetChanged(_entity, components::AxisAlignedBox::typeId, state);
-
-        return true;
-      });
+  this->UpdateLinksBoundingBoxes(_ecm);
+  this->UpdateModelsBoundingBoxes(_ecm);
 }  // NOLINT readability/fn_size
 // TODO (azeey) Reduce size of function and remove the NOLINT above
 
@@ -3736,6 +3781,8 @@ void PhysicsPrivate::UpdateSim(EntityComponentManager &_ecm,
 
   // TODO(louise) Skip this if there are no collision features
   this->UpdateCollisions(_ecm);
+
+  this->UpdateRayIntersections(_ecm);
 }  // NOLINT readability/fn_size
 // TODO (azeey) Reduce size of function and remove the NOLINT above
 
@@ -3746,6 +3793,18 @@ void PhysicsPrivate::UpdateCollisions(EntityComponentManager &_ecm)
   // Quit early if the ContactData component hasn't been created. This means
   // there are no systems that need contact information
   if (!_ecm.HasComponentType(components::ContactSensorData::typeId))
+    return;
+
+  // Also check if any entity currently has a ContactSensorData component.
+  bool needContactSensorData = false;
+  _ecm.Each<components::Collision, components::ContactSensorData>(
+      [&](const Entity &/*unused*/, components::Collision *,
+          components::ContactSensorData */*unused*/) -> bool
+      {
+        needContactSensorData = true;
+        return false;
+      });
+  if (!needContactSensorData)
     return;
 
   // TODO(addisu) If systems are assumed to only have one world, we should
@@ -3906,6 +3965,97 @@ void PhysicsPrivate::UpdateCollisions(EntityComponentManager &_ecm)
 }
 
 //////////////////////////////////////////////////
+void PhysicsPrivate::UpdateRayIntersections(EntityComponentManager &_ecm)
+{
+  GZ_PROFILE("PhysicsPrivate::UpdateRayIntersections");
+  // Quit early if the RaycastData component hasn't been created.
+  // This means there are no systems that need raycasting information
+  if (!_ecm.HasComponentType(components::RaycastData::typeId))
+    return;
+
+  // Assume that there is only one world entity
+  Entity worldEntity = _ecm.EntityByComponents(components::World());
+
+  if (!this->entityWorldMap.HasEntity(worldEntity))
+  {
+    gzwarn << "Failed to find world [" << worldEntity << "]." << std::endl;
+    return;
+  }
+
+  auto worldRayIntersectionFeature =
+      this->entityWorldMap.EntityCast<RayIntersectionFeatureList>(worldEntity);
+
+  if (!worldRayIntersectionFeature)
+  {
+    static bool informed{false};
+    if (!informed)
+    {
+      gzdbg << "Attempting process ray intersections, but the physics "
+             << "engine doesn't support ray intersection features. "
+             << "Ray intersections won't be computed."
+             << std::endl;
+      informed = true;
+    }
+    return;
+  }
+
+  // Go through each entity that has a RaycastData components, trace the
+  // rays and store the results
+  _ecm.Each<components::RaycastData,
+            components::Pose>(
+      [&](const Entity &_entity,
+          components::RaycastData *_raycastData,
+          components::Pose */*_pose*/) -> bool
+      {
+        // Retrieve the rays from the RaycastData component
+        const auto &rays = _raycastData->Data().rays;
+
+        // Clear the previous results
+        auto &results = _raycastData->Data().results;
+        results.clear();
+        results.reserve(rays.size());
+
+        // Get the entity's world pose
+        const auto &entityWorldPose = worldPose(_entity, _ecm);
+
+        for (const auto &ray : rays)
+        {
+          // Convert ray to world frame
+          const math::Vector3d rayStart = entityWorldPose.Pos() +
+            entityWorldPose.Rot().RotateVector(ray.start);
+          const math::Vector3d rayEnd = entityWorldPose.Pos() +
+            entityWorldPose.Rot().RotateVector(ray.end);
+
+          // Perform ray intersection
+          auto rayIntersection =
+            worldRayIntersectionFeature->GetRayIntersectionFromLastStep(
+              math::eigen3::convert(rayStart),
+              math::eigen3::convert(rayEnd));
+
+          const auto rayIntersectionResult =
+            rayIntersection.Get<
+              physics::World3d<RayIntersectionFeatureList>::RayIntersection>();
+
+          results.emplace_back();
+          auto &result = results.back();
+
+          // Convert result to entity frame and store
+          const math::Vector3d intersectionPoint =
+            math::eigen3::convert(rayIntersectionResult.point);
+          result.point = entityWorldPose.Rot().RotateVectorReverse(
+            intersectionPoint - entityWorldPose.Pos());
+
+          result.fraction = rayIntersectionResult.fraction;
+
+          const math::Vector3d normal =
+            math::eigen3::convert(rayIntersectionResult.normal);
+          result.normal = entityWorldPose.Rot().RotateVectorReverse(normal);
+        }
+        return true;
+      });
+}
+
+//////////////////////////////////////////////////
 physics::FrameData3d PhysicsPrivate::LinkFrameDataAtOffset(
       const LinkPtrType &_link, const math::Pose3d &_pose) const
 {
@@ -4004,6 +4154,107 @@ void PhysicsPrivate::DisableContactSurfaceCustomization(const Entity &_world)
 
   gzmsg << "Disabled contact surface customization for world entity ["
          << _world << "]" << std::endl;
+}
+
+//////////////////////////////////////////////////
+void PhysicsPrivate::UpdateLinksBoundingBoxes(EntityComponentManager &_ecm)
+{
+  // Only compute bounding box if component exists to avoid unnecessary
+  // computation for links.
+  _ecm.Each<components::Link, components::AxisAlignedBox>(
+    [&](const Entity &_entity, const components::Link *,
+        components::AxisAlignedBox *_bbox)
+    {
+      auto linkPhys = this->entityLinkMap.Get(_entity);
+      if (!linkPhys)
+      {
+        gzwarn << "Failed to find link [" << _entity << "]." << std::endl;
+        return true;
+      }
+
+      auto bbLink = this->entityLinkMap.EntityCast<
+        LinkBoundingBoxFeatureList>(_entity);
+
+      // Bounding box expressed in the link frame
+      math::AxisAlignedBox bbox;
+
+      if (bbLink)
+      {
+        bbox = math::eigen3::convert(
+          bbLink->GetAxisAlignedBoundingBox(linkPhys->GetFrameID()));
+      }
+      else
+      {
+        static bool informed{false};
+        if (!informed)
+        {
+          gzdbg << "Attempting to get a bounding box, but the physics "
+                 << "engine doesn't support feature "
+                 << "[GetLinkBoundingBox]. Link bounding boxes will be "
+                 << "computed from their collision shapes based on their "
+                 << "geometry properties in SDF." << std::endl;
+          informed = true;
+        }
+
+        // Fallback to SDF API to get the link AABB from its collision shapes.
+        // If the link has no collision shapes, the AABB will be invalid.
+        bbox = gz::sim::Link(_entity).ComputeAxisAlignedBox(_ecm).value_or(
+          math::AxisAlignedBox());
+      }
+
+      auto state = _bbox->SetData(bbox, this->axisAlignedBoxEql) ?
+          ComponentState::PeriodicChange :
+          ComponentState::NoChange;
+      _ecm.SetChanged(_entity, components::AxisAlignedBox::typeId, state);
+
+      return true;
+    });
+}
+
+//////////////////////////////////////////////////
+void PhysicsPrivate::UpdateModelsBoundingBoxes(EntityComponentManager &_ecm)
+{
+  // Only compute bounding box if component exists to avoid unnecessary
+  // computation for models.
+  _ecm.Each<components::Model, components::AxisAlignedBox>(
+    [&](const Entity &_entity, const components::Model *,
+        components::AxisAlignedBox *_bbox)
+    {
+      if (!this->entityModelMap.HasEntity(_entity))
+      {
+        gzwarn << "Failed to find model [" << _entity << "]." << std::endl;
+        return true;
+      }
+
+      auto bbModel = this->entityModelMap.EntityCast<
+        ModelBoundingBoxFeatureList>(_entity);
+
+      if (!bbModel)
+      {
+        static bool informed{false};
+        if (!informed)
+        {
+          gzdbg << "Attempting to get a bounding box, but the physics "
+                 << "engine doesn't support feature "
+                 << "[GetModelBoundingBox]. Bounding box won't be populated."
+                 << std::endl;
+          informed = true;
+        }
+
+        // Break Each call since no AxisAlignedBox'es can be processed
+        return false;
+      }
+
+      // Bounding box expressed in the world frame
+      math::AxisAlignedBox bbox =
+          math::eigen3::convert(bbModel->GetAxisAlignedBoundingBox());
+      auto state = _bbox->SetData(bbox, this->axisAlignedBoxEql) ?
+          ComponentState::PeriodicChange :
+          ComponentState::NoChange;
+      _ecm.SetChanged(_entity, components::AxisAlignedBox::typeId, state);
+
+      return true;
+    });
 }
 
 GZ_ADD_PLUGIN(Physics,

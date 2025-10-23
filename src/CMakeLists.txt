@@ -114,6 +114,7 @@ set (gtest_sources
   Joint_TEST.cc
   Light_TEST.cc
   Link_TEST.cc
+  MeshInertiaCalculator_TEST.cc
   Model_TEST.cc
   Primitives_TEST.cc
   SdfEntityCreator_TEST.cc
@@ -124,7 +125,6 @@ set (gtest_sources
   SimulationRunner_TEST.cc
   SystemLoader_TEST.cc
   SystemManager_TEST.cc
-  System_TEST.cc
   TestFixture_TEST.cc
   Util_TEST.cc
   World_TEST.cc
@@ -245,10 +245,6 @@ target_include_directories(${PROJECT_LIBRARY_TARGET_NAME}
   $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/gz_msgs_gen>
 )
 
-set(GZ_SIM_PLUGIN_INSTALL_DIR
-  ${CMAKE_INSTALL_PREFIX}/${GZ_LIB_INSTALL_DIR}/gz-${GZ_DESIGNATION}-${PROJECT_VERSION_MAJOR}/plugins
-)
-
 include_directories(${PROJECT_SOURCE_DIR}/test)
 
 # Build the unit tests
@@ -301,6 +297,7 @@ foreach(CMD_TEST
 
   set(_env_vars)
   list(APPEND _env_vars "GZ_CONFIG_PATH=${CMAKE_BINARY_DIR}/test/conf")
+  list(APPEND _env_vars "GZ_IP=127.0.0.1")
   list(APPEND _env_vars "GZ_SIM_SYSTEM_PLUGIN_PATH=$<TARGET_FILE_DIR:TestModelSystem>")
 
   set_tests_properties(${CMD_TEST} PROPERTIES
@@ -314,7 +311,7 @@ foreach(CMD_TEST
   # to the PATH. This is done via the ENVIRONMENT_MODIFICATION that is only available
   # since CMake 3.22. However, if an older CMake is used another trick to install the libraries
   # beforehand
-  if (WIN32 AND CMAKE_VERSION STRGREATER "3.22")
+  if (WIN32 AND ${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.22")
     set_tests_properties(${CMD_TEST} PROPERTIES
       ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
   endif()

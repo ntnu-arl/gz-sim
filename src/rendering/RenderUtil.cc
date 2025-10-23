@@ -24,6 +24,7 @@
 #include <vector>
 
 #include <sdf/Actor.hh>
+#include <sdf/Camera.hh>
 #include <sdf/Collision.hh>
 #include <sdf/Element.hh>
 #include <sdf/Joint.hh>
@@ -1260,14 +1261,17 @@ void RenderUtil::Update()
 
       if (newLightRendering)
       {
-        rendering::VisualPtr lightVisual =
-          this->dataPtr->sceneManager.CreateLightVisual(
-            std::get<0>(light) + 1,
-            std::get<1>(light),
-            std::get<2>(light),
-            std::get<0>(light));
-        this->dataPtr->matchLightWithVisuals[std::get<0>(light)] =
-          std::get<0>(light) + 1;
+        if (!this->dataPtr->enableSensors)
+        {
+          rendering::VisualPtr lightVisual =
+            this->dataPtr->sceneManager.CreateLightVisual(
+              std::get<0>(light) + 1,
+              std::get<1>(light),
+              std::get<2>(light),
+              std::get<0>(light));
+          this->dataPtr->matchLightWithVisuals[std::get<0>(light)] =
+            std::get<0>(light) + 1;
+        }
       }
       else
       {
@@ -1322,6 +1326,18 @@ void RenderUtil::Update()
         {
           gzerr << "Failed to create sensor [" << sensorName << "]"
                  << std::endl;
+        }
+        else
+        {
+          auto sensorNode = this->dataPtr->sceneManager.NodeById(entity);
+          auto semPose = dataSdf.SemanticPose();
+          math::Pose3d sensorPose;
+          sdf::Errors errors = semPose.Resolve(sensorPose);
+          if (!errors.empty())
+          {
+            sensorPose = dataSdf.RawPose();
+          }
+          sensorNode->SetLocalPose(sensorPose);
         }
       }
     }
@@ -2383,86 +2399,6 @@ void RenderUtilPrivate::UpdateRenderingEntities(
   _ecm.Each<components::Light, components::Pose>(
       [&](const Entity &_entity,
         const components::Light *,
-        const components::Pose *_pose)->bool
-      {
-        this->entityPoses[_entity] = _pose->Data();
-        return true;
-      });
-
-  // Update cameras
-  _ecm.Each<components::Camera, components::Pose>(
-      [&](const Entity &_entity,
-        const components::Camera *,
-        const components::Pose *_pose)->bool
-      {
-        this->entityPoses[_entity] = _pose->Data();
-        return true;
-      });
-
-  // Update depth cameras
-  _ecm.Each<components::DepthCamera, components::Pose>(
-      [&](const Entity &_entity,
-        const components::DepthCamera *,
-        const components::Pose *_pose)->bool
-      {
-        this->entityPoses[_entity] = _pose->Data();
-        return true;
-      });
-
-  // Update RGBD cameras
-  _ecm.Each<components::RgbdCamera, components::Pose>(
-      [&](const Entity &_entity,
-        const components::RgbdCamera *,
-        const components::Pose *_pose)->bool
-      {
-        this->entityPoses[_entity] = _pose->Data();
-        return true;
-      });
-
-  // Update gpu_lidar
-  _ecm.Each<components::GpuLidar, components::Pose>(
-      [&](const Entity &_entity,
-        const components::GpuLidar *,
-        const components::Pose *_pose)->bool
-      {
-        this->entityPoses[_entity] = _pose->Data();
-        return true;
-      });
-
-  // Update thermal cameras
-  _ecm.Each<components::ThermalCamera, components::Pose>(
-      [&](const Entity &_entity,
-        const components::ThermalCamera *,
-        const components::Pose *_pose)->bool
-      {
-        this->entityPoses[_entity] = _pose->Data();
-        return true;
-      });
-
-  // Update segmentation cameras
-  _ecm.Each<components::SegmentationCamera, components::Pose>(
-      [&](const Entity &_entity,
-        const components::SegmentationCamera *,
-        const components::Pose *_pose)->bool
-      {
-        this->entityPoses[_entity] = _pose->Data();
-        return true;
-      });
-
-  // Update bounding box cameras
-  _ecm.Each<components::BoundingBoxCamera, components::Pose>(
-      [&](const Entity &_entity,
-        const components::BoundingBoxCamera *,
-        const components::Pose *_pose)->bool
-      {
-        this->entityPoses[_entity] = _pose->Data();
-        return true;
-      });
-
-  // Update wide angle cameras
-  _ecm.Each<components::WideAngleCamera, components::Pose>(
-      [&](const Entity &_entity,
-        const components::WideAngleCamera *,
         const components::Pose *_pose)->bool
       {
         this->entityPoses[_entity] = _pose->Data();

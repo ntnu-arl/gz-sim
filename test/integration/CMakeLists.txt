@@ -22,6 +22,7 @@ set(tests
   each_new_removed.cc
   entity_erase.cc
   entity_system.cc
+  entity_semantics_system.cc
   environment_preload_system.cc
   environmental_sensor_system.cc
   events.cc
@@ -44,11 +45,13 @@ set(tests
   level_manager.cc
   level_manager_runtime_performers.cc
   light.cc
+  lighter_than_air_dynamics.cc
   link.cc
   logical_camera_system.cc
   logical_audio_sensor_plugin.cc
   magnetometer_system.cc
   material.cc
+  mecanum_drive_system.cc
   mesh_inertia_calculation.cc
   model.cc
   model_photo_shoot_default_joints.cc
@@ -71,6 +74,7 @@ set(tests
   reset.cc
   reset_detachable_joint.cc
   save_world.cc
+  spacecraft.cc
   scene_broadcaster_system.cc
   sdf_frame_semantics.cc
   sdf_include.cc
@@ -106,6 +110,7 @@ set(tests_needing_display
   dvl_system.cc
   dvl_system_bottom_tracking.cc
   dvl_system_water_mass_tracking.cc
+  camera_sensor_global_illumination.cc
   gpu_lidar.cc
   markers.cc
   mesh_uri.cc
@@ -244,5 +249,5 @@ endif()
 
 if (TARGET INTEGRATION_python_system_loader)
   set_tests_properties(INTEGRATION_python_system_loader PROPERTIES
-    ENVIRONMENT "PYTHONPATH=${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/python/")
+    ENVIRONMENT "PYTHONPATH=${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR}/python/:$ENV{PYTHONPATH}")
 endif()

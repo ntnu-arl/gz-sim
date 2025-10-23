@@ -99,6 +99,12 @@ namespace gz
       /// \return Path to the downloaded resource, empty on error.
       public: std::string FetchResourceUri(const common::URI &_uri);
 
+      /// \brief Helper function that loads an SDF root object based on
+      /// values in a ServerConfig object.
+      /// \param[in] _config Server config to read from.
+      /// \return Set of SDF errors.
+      public: sdf::Errors LoadSdfRootHelper(const ServerConfig &_config);
+
       /// \brief Signal handler callback
       /// \param[in] _sig The signal number
       private: void OnSignal(int _sig);
@@ -148,7 +154,10 @@ namespace gz
         const gz::msgs::ServerControl &_req, msgs::Boolean &_res);
 
       /// \brief A pool of worker threads.
-      public: common::WorkerPool workerPool{2};
+      /// \note We use optional here since most of the time, there will be a
+      /// single simulation runner and a workerpool is not needed. We will
+      /// initialize the workerpool as necessary later on.
+      public: std::optional<common::WorkerPool> workerPool;
 
       /// \brief All the simulation runners.
       public: std::vector<std::unique_ptr<SimulationRunner>> simRunners;
@@ -186,6 +195,11 @@ namespace gz
       /// \brief Map from file paths to fuel URIs. This is set and updated by
       /// Server. It is used in the SDFormat world generator when saving worlds
       public: std::unordered_map<std::string, std::string> fuelUriMap;
+
+      /// \brief Gazebo classic material URI string
+      /// A URI matching this string indicates that it is a gazebo classic
+      /// material.
+      public: static const char kClassicMaterialScriptUri[];
 
       /// \brief List of names for all worlds loaded in this server.
       private: std::vector<std::string> worldNames;

@@ -675,22 +675,28 @@ namespace gz
       /// \return True if there are components marked for removal.
       public: bool HasRemovedComponents() const;
 
+      /// \brief Get an Entity based on a name component that is associated
+      /// with the entity.
+      /// \param[in] _name Name associated with the Entity
+      /// \return The Entity, if an Entity with the given name exists,
+      /// otherwise return std::nullopt.
+      public: std::optional<Entity> EntityByName(
+                  const std::string &_name) const;
+
       /// \brief Clear the list of newly added entities so that a call to
-      /// EachAdded after this will have no entities to iterate. This function
-      /// is protected to facilitate testing.
-      protected: void ClearNewlyCreatedEntities();
+      /// EachAdded after this will have no entities to iterate.
+      public: void ClearNewlyCreatedEntities();
 
       /// \brief Clear the list of removed components so that a call to
       /// RemoveComponent doesn't make the list grow indefinitely.
-      protected: void ClearRemovedComponents();
+      public: void ClearRemovedComponents();
 
       /// \brief Process all entity remove requests. This will remove
-      /// entities and their components. This function is protected to
-      /// facilitate testing.
-      protected: void ProcessRemoveEntityRequests();
+      /// entities and their components.
+      public: void ProcessRemoveEntityRequests();
 
       /// \brief Mark all components as not changed.
-      protected: void SetAllComponentsUnchanged();
+      public: void SetAllComponentsUnchanged();
 
       /// Compute the diff between this EntityComponentManager and _other at the
       /// entity level. This does not compute the diff between components of an
@@ -827,6 +833,9 @@ namespace gz
       // to Gazebo.
       friend class GuiRunner;
       friend class SimulationRunner;
+
+      // Make SystemManager friend so it has access to removals
+      friend class SystemManager;
 
       // Make network managers friends so they have control over component
       // states. Like the runners, the managers are internal.
